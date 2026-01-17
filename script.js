@@ -1,20 +1,11 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const button = document.getElementById("runButton");
-  button.addEventListener("click", runMagi);
-});
-
 function runMagi() {
   const input = document.getElementById("input").value.trim();
-  if (!input) {
-    alert("判定したい内容を入力してください。");
-    return;
-  }
 
-  const reality = judgeRealis(input);
-  const meaning = judgeMeina(input);
+  const reality = judgeReality(input);
+  const meaning = judgeMeaning(input);
   const regret = judgeRegret(input);
 
-  const decision = makeFinalDecision(reality.result, meaning.result, regret.result);
+  const finalDecision = decideFinal(reality.score, meaning.score, regret.score);
 
   const result = `
 ━━━━━━━━━━━━━━
@@ -25,108 +16,132 @@ ${input}
 
 🧭 判定：
 
-【レアリス｜REALITY】 ${reality.result}
+【レアリス｜REALITY】 ${reality.symbol}
 ${reality.reason}
 
-【メイナ｜MEANING】 ${meaning.result}
+【メイナ｜MEANING】 ${meaning.symbol}
 ${meaning.reason}
 
-【レグレト｜REGRET】 ${regret.result}
+【レグレト｜REGRET】 ${regret.symbol}
 ${regret.reason}
 
 🔍 結論：
-${decision}
+${finalDecision}
 ━━━━━━━━━━━━━━
   `;
 
   document.getElementById("output").textContent = result;
 }
 
-/* ===== 人格別判定ロジック（人格語彙版） ===== */
+/* ─────────────────────────────
+   各人格の判断ロジック
+───────────────────────────── */
 
-function judgeRealis(text) {
-  if (text.match(/今すぐ|簡単|できそう|現実的/)) {
-    return {
-      result: "○",
-      reason: "レアリス：条件・資源・時間の制約を考慮しても、現実的に実行可能と判断する。リスクは許容範囲内だ。"
-    };
+function judgeReality(text) {
+  const t = text.toLowerCase();
+
+  let score = 0;
+  let reason = "";
+
+  if (t.includes("節約") || t.includes("安く") || t.includes("値段") || t.includes("コスト")) {
+    score += 1;
   }
-  if (text.match(/難しそう|不安|リスク|準備/)) {
-    return {
-      result: "△",
-      reason: "レアリス：実行可能性はあるが、条件調整とリスク管理が必要だ。現実面の不確実性が残る。"
-    };
+  if (t.includes("夜行") || t.includes("長時間") || t.includes("疲") || t.includes("睡眠")) {
+    score -= 2;
   }
-  if (text.match(/無理|不可能|現実的じゃない/)) {
-    return {
-      result: "✖️",
-      reason: "レアリス：現状の制約条件では実行性が低く、破綻リスクが高すぎる。現実的ではない。"
-    };
+  if (t.includes("新幹線") || t.includes("早く") || t.includes("快適") || t.includes("安全")) {
+    score += 2;
   }
-  return {
-    result: "△",
-    reason: "レアリス：現実条件の情報が不足しているため、中間評価とする。追加検討が必要だ。"
-  };
+
+  if (score >= 2) {
+    reason = "レアリス：現実的条件として、効率・安全・快適性の観点で有利な選択肢が含まれているため、肯定評価とする。";
+  } else if (score <= -1) {
+    reason = "レアリス：実務的・現実的に見ると、時間や体力、安全性の面で負担が大きく、現実性が低いと判断する。";
+  } else {
+    reason = "レアリス：現実条件の利点と欠点が拮抗しており、実用性の観点では中間評価とする。";
+  }
+
+  return scoreToResult(score, reason);
 }
 
-function judgeMeina(text) {
-  if (text.match(/大事|人生|意味|夢|やりたい/)) {
-    return {
-      result: "○",
-      reason: "メイナ：これはあなたの人生軸や価値観に強く合致している。自分らしさと納得感が高い選択だと思う。"
-    };
+function judgeMeaning(text) {
+  const t = text.toLowerCase();
+
+  let score = 0;
+  let reason = "";
+
+  if (t.includes("節約") || t.includes("安く") || t.includes("意味") || t.includes("価値")) {
+    score += 2;
   }
-  if (text.match(/まあまあ|悪くない|迷う/)) {
-    return {
-      result: "△",
-      reason: "メイナ：意味は感じるけれど、心のどこかに違和感も残っている。まだ納得しきれていない印象。"
-    };
+  if (t.includes("体験") || t.includes("旅") || t.includes("挑戦") || t.includes("選択")) {
+    score += 1;
   }
-  if (text.match(/どうでもいい|義務|嫌/)) {
-    return {
-      result: "✖️",
-      reason: "メイナ：これはあなたの価値観や想いと噛み合っていない。意味を見出しにくい選択だと感じる。"
-    };
+  if (t.includes("義務") || t.includes("仕方なく") || t.includes("嫌々")) {
+    score -= 2;
   }
-  return {
-    result: "△",
-    reason: "メイナ：意味や価値との一致度がはっきりしないため、今は中間評価とする。"
-  };
+
+  if (score >= 2) {
+    reason = "メイナ：価値や意味の整合性として、本人の動機や選択の物語性が感じられ、肯定評価とする。";
+  } else if (score <= -1) {
+    reason = "メイナ：意味的充足や価値との一致度が低く、内面的な納得感に欠けるため否定評価とする。";
+  } else {
+    reason = "メイナ：意味的価値の方向性が定まらず、現時点では中間評価とする。";
+  }
+
+  return scoreToResult(score, reason);
 }
 
 function judgeRegret(text) {
-  if (text.match(/後悔する|一生|逃したくない/)) {
-    return {
-      result: "○",
-      reason: "レグレト：この選択を見送れば、将来のあなたは強い心残りと後悔を抱える可能性が高い。"
-    };
+  const t = text.toLowerCase();
+
+  let score = 0;
+  let reason = "";
+
+  if (t.includes("後悔") || t.includes("後で") || t.includes("将来")) {
+    score += 1;
   }
-  if (text.match(/後悔するかも|微妙/)) {
-    return {
-      result: "△",
-      reason: "レグレト：後悔する可能性はあるが、致命的なものになるかは不透明だ。未来の自分は揺れるかもしれない。"
-    };
+  if (t.includes("疲") || t.includes("無理") || t.includes("しんど")) {
+    score -= 2;
   }
-  if (text.match(/別に|気にしない|問題ない/)) {
-    return {
-      result: "✖️",
-      reason: "レグレト：この選択をしなくても、未来のあなたは大きな後悔を抱かない可能性が高い。"
-    };
+  if (t.includes("やらなかった") || t.includes("逃す") || t.includes("機会")) {
+    score += 2;
   }
+
+  if (score >= 2) {
+    reason = "レグレト：将来振り返った際に『やらなかった後悔』が大きくなる可能性が高いため、肯定評価とする。";
+  } else if (score <= -1) {
+    reason = "レグレト：実行した結果の疲労や不満が後悔として残る可能性が高く、否定評価とする。";
+  } else {
+    reason = "レグレト：実行後と未実行後の後悔の大きさが拮抗しており、中間評価とする。";
+  }
+
+  return scoreToResult(score, reason);
+}
+
+/* ─────────────────────────────
+   スコア → 記号変換
+───────────────────────────── */
+
+function scoreToResult(score, reason) {
+  let symbol = "△";
+  if (score >= 2) symbol = "○";
+  else if (score <= -1) symbol = "✖️";
+
   return {
-    result: "△",
-    reason: "レグレト：後悔の大きさを見積もる材料が不足しているため、中間評価とする。"
+    score,
+    symbol,
+    reason
   };
 }
 
-/* ===== 最終結論 ===== */
+/* ─────────────────────────────
+   最終結論ロジック
+───────────────────────────── */
 
-function makeFinalDecision(reality, meaning, regret) {
-  const results = [reality, meaning, regret];
-  const circleCount = results.filter(r => r === "○").length;
-  const crossCount = results.filter(r => r === "✖️").length;
+function decideFinal(r, m, g) {
+  const sum = r + m + g;
 
-  if (circleCount >= 2) return "実行すべき";
-  if (crossCount >= 2) return "見送り";
-  return "保留・再検討";
+  if (sum >= 4) return "結論：やるべき";
+  if (sum <= -2) return "結論：見送り";
+  return "結論：保留・再検討";
 }
