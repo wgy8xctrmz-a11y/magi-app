@@ -1,6 +1,10 @@
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("runButton");
-  if (btn) btn.addEventListener("click", runMagi);
+  if (!btn) {
+    alert("runButton が見つかりません");
+    return;
+  }
+  btn.addEventListener("click", runMagi);
 });
 
 /* ==============================
@@ -16,9 +20,6 @@ const JUDGMENT_STRUCTURES = {
   efficiency_vs_acceptance: { label: "効率 vs 納得感" }
 };
 
-/* ==============================
-   判断構造の兆候語
-============================== */
 const STRUCTURE_SIGNS = {
   safety_vs_growth: ["不安", "怖", "リスク", "無理", "踏み出"],
   short_vs_long: ["今", "将来", "あとで", "長期", "先々"],
@@ -30,27 +31,29 @@ const STRUCTURE_SIGNS = {
 };
 
 /* ==============================
-   メイン処理
+   メイン処理（絶対に沈黙しない）
 ============================== */
 function runMagi() {
-  const inputEl = document.getElementById("input");
   const outEl = document.getElementById("output");
-  if (!inputEl || !outEl) return;
 
-  const input = inputEl.value.trim();
-  if (!input) {
-    outEl.textContent = "※ 判断したい内容を入力してください。";
-    return;
-  }
+  try {
+    const inputEl = document.getElementById("input");
+    if (!inputEl) throw new Error("input が見つかりません");
 
-  const scores = extractJudgmentStructures(input);
-  const structures = pickMainStructures(scores);
+    const input = inputEl.value.trim();
+    if (!input) {
+      outEl.textContent = "※ 判断したい内容を入力してください。";
+      return;
+    }
 
-  const reality = generateReason("reality", structures);
-  const meaning = generateReason("meaning", structures);
-  const regret  = generateReason("regret", structures);
+    const scores = extractJudgmentStructures(input);
+    const structures = pickMainStructures(scores);
 
-  const result = `
+    const reality = generateReason("reality", structures);
+    const meaning = generateReason("meaning", structures);
+    const regret  = generateReason("regret", structures);
+
+    outEl.textContent = `
 ━━━━━━━━━━━━━━
 【PERSONAL MAGI 判定ログ】
 ━━━━━━━━━━━━━━
@@ -75,8 +78,15 @@ ${regret}
 結論：保留・再検討
 ━━━━━━━━━━━━━━
 `;
+  } catch (e) {
+    outEl.textContent =
+`⚠️ MAGI 実行エラーが発生しました
 
-  outEl.textContent = result;
+${e.message}
+
+（このメッセージが見えたら、
+ロジックではなく構造エラーです）`;
+  }
 }
 
 /* ==============================
@@ -93,49 +103,39 @@ function extractJudgmentStructures(text) {
   return scores;
 }
 
-/* ==============================
-   主構造選択（必ず返す）
-============================== */
 function pickMainStructures(scores) {
   const picked = Object.entries(scores)
     .filter(([_, v]) => v > 0)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
     .map(([k]) => k);
 
-  // ★ フォールバック（超重要）
   if (picked.length === 0) {
     return ["efficiency_vs_acceptance", "short_vs_long"];
   }
-  return picked;
+  return picked.slice(0, 3);
 }
 
-/* ==============================
-   理由文生成（人格は必ず立場を取る）
-============================== */
 function generateReason(personaKey, structures) {
-  const main = structures[0] || "efficiency_vs_acceptance";
+  const main = structures[0];
   const label = JUDGMENT_STRUCTURES[main].label;
 
   if (personaKey === "reality") {
     return `私はこの悩みを「${label}」のトレードオフだと捉える。
 私は破綻しにくい側に立つ人格だ。
-この状況では、無理をして進む選択は現実的なリスクが残る。
-だから私は、この判断にはブレーキをかける。`;
+この状況では無理をして進む判断は危険だと見る。
+だから私はブレーキをかける。`;
   }
 
   if (personaKey === "meaning") {
     return `この悩みは「${label}」において、
 自分が何を大事にして選びたいかが問われている。
-私は納得して選ぶ側に立つ人格だ。
-ただし今は、その覚悟や言語化がまだ足りないと感じる。`;
+意味は見出せるが、覚悟の言語化がまだ足りない。`;
   }
 
   if (personaKey === "regret") {
-    return `私はこの悩みを「${label}」の観点から、
-将来の後悔として考える。
-私は取り返しのつかない後悔を避ける側に立つ。
-この選択で失われる可能性のあるものは、後から戻せない。`;
+    return `私はこの悩みを将来の後悔から考える。
+取り返しのつかない後悔が残る選択は避けたい。
+だから慎重側に寄せる。`;
   }
 
   return "";
