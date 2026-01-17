@@ -1,3 +1,8 @@
+document.addEventListener("DOMContentLoaded", () => {
+  const button = document.getElementById("runButton");
+  button.addEventListener("click", runMagi);
+});
+
 function runMagi() {
   const input = document.getElementById("input").value.trim();
 
