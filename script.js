@@ -1,10 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("runButton");
-  if (!btn) {
-    alert("runButton が見つかりません");
-    return;
-  }
-  btn.addEventListener("click", runMagi);
+  if (btn) btn.addEventListener("click", runMagi);
 });
 
 /* ==============================
@@ -20,73 +16,53 @@ const JUDGMENT_STRUCTURES = {
   efficiency_vs_acceptance: { label: "効率 vs 納得感" }
 };
 
+/* ==============================
+   判断構造の兆候語
+============================== */
 const STRUCTURE_SIGNS = {
   safety_vs_growth: ["不安", "怖", "リスク", "無理", "踏み出"],
   short_vs_long: ["今", "将来", "あとで", "長期", "先々"],
   certainty_vs_possibility: ["安定", "確実", "可能性", "チャンス"],
   self_vs_others: ["相手", "周り", "迷惑", "家族", "期待"],
-  present_vs_ideal: ["このまま", "変わりたい", "成長", "理想"],
+  present_vs_ideal: ["このまま", "変わりたい", "成長", "理想", "挑戦"],
   failure_vs_regret: ["失敗", "後悔", "やらなかった"],
-  efficiency_vs_acceptance: ["効率", "合理", "納得", "気持ち"]
+  efficiency_vs_acceptance: ["効率", "合理", "納得", "気持ち", "値段"]
 };
 
 /* ==============================
-   メイン処理（絶対に沈黙しない）
+   質問タイプ判定
 ============================== */
-function runMagi() {
-  const outEl = document.getElementById("output");
+const QUESTION_TYPE_SIGNS = {
+  RELATION: ["相手", "人", "関係", "言うべき", "距離", "我慢"],
+  CHALLENGE: ["安定", "挑戦", "踏み出", "変わ", "ずっと", "やりたかった"],
+  CONTINUE: ["続ける", "辞める", "このまま", "やめ時", "見切り"],
+  CHOICE: ["ではなく", "どちら", "か", "選ぶ", "比べ"]
+};
 
-  try {
-    const inputEl = document.getElementById("input");
-    if (!inputEl) throw new Error("input が見つかりません");
+function detectQuestionType(text) {
+  const t = text.replace(/\s/g, "");
+  if (QUESTION_TYPE_SIGNS.RELATION.some(w => t.includes(w))) return "人間関係型";
+  if (QUESTION_TYPE_SIGNS.CHALLENGE.some(w => t.includes(w))) return "挑戦・踏み出し型";
+  if (QUESTION_TYPE_SIGNS.CONTINUE.some(w => t.includes(w))) return "継続・撤退型";
+  return "選択・比較型";
+}
 
-    const input = inputEl.value.trim();
-    if (!input) {
-      outEl.textContent = "※ 判断したい内容を入力してください。";
-      return;
-    }
+/* ==============================
+   意図仮説レイヤー
+============================== */
+const QUESTION_TYPE_HYPOTHESES = {
+  "選択・比較型": ["efficiency_vs_acceptance", "failure_vs_regret"],
+  "挑戦・踏み出し型": ["safety_vs_growth", "present_vs_ideal", "failure_vs_regret"],
+  "継続・撤退型": ["short_vs_long", "certainty_vs_possibility"],
+  "人間関係型": ["self_vs_others", "failure_vs_regret"]
+};
 
-    const scores = extractJudgmentStructures(input);
-    const structures = pickMainStructures(scores);
-
-    const reality = generateReason("reality", structures);
-    const meaning = generateReason("meaning", structures);
-    const regret  = generateReason("regret", structures);
-
-    outEl.textContent = `
-━━━━━━━━━━━━━━
-【PERSONAL MAGI 判定ログ】
-━━━━━━━━━━━━━━
-📌 対象：
-${input}
-
-🧠 判断構造：
-${structures.map(k => JUDGMENT_STRUCTURES[k].label).join(" / ")}
-
-🧭 判定：
-
-【レアリス｜REALITY】 △
-${reality}
-
-【メイナ｜MEANING】 △
-${meaning}
-
-【レグレト｜REGRET】 △
-${regret}
-
-🔍 結論：
-結論：保留・再検討
-━━━━━━━━━━━━━━
-`;
-  } catch (e) {
-    outEl.textContent =
-`⚠️ MAGI 実行エラーが発生しました
-
-${e.message}
-
-（このメッセージが見えたら、
-ロジックではなく構造エラーです）`;
-  }
+function applyIntentHypotheses(scores, questionType) {
+  const hypotheses = QUESTION_TYPE_HYPOTHESES[questionType] || [];
+  hypotheses.forEach(key => {
+    scores[key] = (scores[key] || 0) + 1;
+  });
+  return scores;
 }
 
 /* ==============================
@@ -107,36 +83,119 @@ function pickMainStructures(scores) {
   const picked = Object.entries(scores)
     .filter(([_, v]) => v > 0)
     .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
     .map(([k]) => k);
 
   if (picked.length === 0) {
     return ["efficiency_vs_acceptance", "short_vs_long"];
   }
-  return picked.slice(0, 3);
+  return picked;
 }
 
-function generateReason(personaKey, structures) {
-  const main = structures[0];
-  const label = JUDGMENT_STRUCTURES[main].label;
+/* ==============================
+   判定記号ルール
+============================== */
+const DECISION_RULES = {
+  reality: {
+    blockIf: ["safety_vs_growth", "failure_vs_regret"],
+    allowIf: []
+  },
+  meaning: {
+    allowIf: ["present_vs_ideal", "safety_vs_growth", "failure_vs_regret"],
+    blockIf: []
+  },
+  regret: {
+    blockIf: ["safety_vs_growth"],
+    allowIf: ["failure_vs_regret"]
+  }
+};
+
+function decideSymbol(personaKey, scores) {
+  const rules = DECISION_RULES[personaKey];
+  const strong = key => (scores[key] || 0) >= 2;
+
+  if (rules.blockIf && rules.blockIf.some(strong)) return "✖️";
+  if (rules.allowIf && rules.allowIf.some(strong)) return "○";
+  return "△";
+}
+
+/* ==============================
+   理由文生成
+============================== */
+function generateReason(personaKey, mainStructure) {
+  const label = JUDGMENT_STRUCTURES[mainStructure].label;
 
   if (personaKey === "reality") {
-    return `私はこの悩みを「${label}」のトレードオフだと捉える。
-私は破綻しにくい側に立つ人格だ。
-この状況では無理をして進む判断は危険だと見る。
-だから私はブレーキをかける。`;
+    return `私はこの悩みを「${label}」の観点から見る。
+破綻しにくさと安全性を最優先に考える人格として、
+無理を前提に進む判断にはブレーキをかけたい。`;
   }
 
   if (personaKey === "meaning") {
-    return `この悩みは「${label}」において、
-自分が何を大事にして選びたいかが問われている。
-意味は見出せるが、覚悟の言語化がまだ足りない。`;
+    return `この問いは「${label}」に関わるものだ。
+自分が何に納得して生きたいかという軸で見ると、
+意味や価値を感じられる選択かどうかが重要になる。`;
   }
 
   if (personaKey === "regret") {
-    return `私はこの悩みを将来の後悔から考える。
-取り返しのつかない後悔が残る選択は避けたい。
-だから慎重側に寄せる。`;
+    return `私はこの選択を将来から振り返る。
+「${label}」の結果として、
+後になって強い後悔が残らないかを重く見る。`;
+  }
+}
+
+/* ==============================
+   メイン処理
+============================== */
+function runMagi() {
+  const inputEl = document.getElementById("input");
+  const outEl = document.getElementById("output");
+  if (!inputEl || !outEl) return;
+
+  const input = inputEl.value.trim();
+  if (!input) {
+    outEl.textContent = "※ 判断したい内容を入力してください。";
+    return;
   }
 
-  return "";
+  // 基本抽出
+  let scores = extractJudgmentStructures(input);
+
+  // 質問タイプ → 意図仮説
+  const questionType = detectQuestionType(input);
+  scores = applyIntentHypotheses(scores, questionType);
+
+  const structures = pickMainStructures(scores);
+  const main = structures[0];
+
+  const realitySymbol = decideSymbol("reality", scores);
+  const meaningSymbol = decideSymbol("meaning", scores);
+  const regretSymbol  = decideSymbol("regret", scores);
+
+  outEl.textContent = `
+━━━━━━━━━━━━━━
+【PERSONAL MAGI 判定ログ】
+━━━━━━━━━━━━━━
+📌 対象：
+${input}
+
+🧠 問いの型：
+${questionType}
+
+🧠 判断構造：
+${structures.map(k => JUDGMENT_STRUCTURES[k].label).join(" / ")}
+
+🧭 判定：
+
+【レアリス｜REALITY】 ${realitySymbol}
+${generateReason("reality", main)}
+
+【メイナ｜MEANING】 ${meaningSymbol}
+${generateReason("meaning", main)}
+
+【レグレト｜REGRET】 ${regretSymbol}
+${generateReason("regret", main)}
+
+━━━━━━━━━━━━━━
+`;
 }
