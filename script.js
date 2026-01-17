@@ -7,11 +7,12 @@ function runMagi() {
   if (!input) return;
 
   const type = classifyQuestion(input);
+  const assumptions = buildAssumptions(input, type);
   const views = viewpoints[type];
 
-  const reality = thinkReality(input, views.reality);
-  const meaning = thinkMeaning(input, views.meaning);
-  const regret  = thinkRegret(input, views.regret);
+  const reality = thinkReality(input, views.reality, assumptions);
+  const meaning = thinkMeaning(input, views.meaning, assumptions);
+  const regret  = thinkRegret(input, views.regret, assumptions);
 
   const finalDecision = decideFinal(reality.score, meaning.score, regret.score);
 
@@ -24,6 +25,9 @@ ${input}
 
 🧠 問いの型：
 ${type}
+
+🧠 暗黙の前提（MAGI仮定）：
+${assumptions.join(" / ")}
 
 🧭 判定：
 
@@ -45,115 +49,105 @@ ${finalDecision}
 }
 
 /* ==============================
-   問いの分類レイヤー
+   問い分類
 ============================== */
 function classifyQuestion(text) {
   if (text.match(/どちら|か|選ぶ|比較/)) return "選択・比較型";
-  if (text.match(/続ける|やめる|辞める|継続/)) return "継続・中断型";
-  if (text.match(/挑戦|やるべき|踏み出す/)) return "挑戦・リスク型";
+  if (text.match(/続ける|辞める|やめる|継続/)) return "継続・中断型";
+  if (text.match(/挑戦|踏み出す|リスク/)) return "挑戦・リスク型";
   if (text.match(/伝える|距離|関係/)) return "人間関係型";
   return "汎用判断型";
 }
 
 /* ==============================
-   問いタイプ別・観点セット
+   前提補完レイヤー（核心）
 ============================== */
-const viewpoints = {
-  "選択・比較型": {
-    reality: ["コスト", "時間", "体力", "安全性"],
-    meaning: ["納得感", "自分らしさ", "選択の理由"],
-    regret:  ["選ばなかった後悔", "将来の比較"]
-  },
-  "継続・中断型": {
-    reality: ["安定性", "負担", "代替案"],
-    meaning: ["価値観との一致", "我慢か意味か"],
-    regret:  ["続けた未来", "辞めた未来"]
-  },
-  "挑戦・リスク型": {
-    reality: ["失敗可能性", "準備状況"],
-    meaning: ["成長", "人生軸"],
-    regret:  ["挑戦しなかった後悔", "失敗の後悔"]
-  },
-  "人間関係型": {
-    reality: ["影響範囲", "関係性の変化"],
-    meaning: ["誠実さ", "自分の感情"],
-    regret:  ["言わなかった後悔", "言った後の関係"]
-  },
-  "汎用判断型": {
-    reality: ["現実的制約", "実行可能性"],
-    meaning: ["意味", "納得"],
-    regret:  ["後悔"]
+function buildAssumptions(text, type) {
+  const a = [];
+
+  // 共通の常識
+  if (text.match(/行く|移動|旅行/)) {
+    a.push("一定の移動距離がある");
   }
-};
+  if (text.match(/節約|安く|値段/)) {
+    a.push("コスト差を気にしている");
+  }
+
+  // 交通系の常識
+  if (text.match(/夜行/)) {
+    a.push("長時間移動になる");
+    a.push("睡眠の質が下がる可能性");
+    a.push("翌日の体力に影響");
+  }
+  if (text.match(/新幹線/)) {
+    a.push("短時間で移動できる");
+    a.push("体力消耗が少ない");
+    a.push("コストは高め");
+  }
+
+  // 人生判断系の常識
+  if (type === "継続・中断型") {
+    a.push("現状には一定の理由がある");
+    a.push("変化には不安が伴う");
+  }
+
+  return a;
+}
 
 /* ==============================
-   人格別・思考生成
+   人格別思考生成
 ============================== */
 
-function thinkReality(text, points) {
+function thinkReality(text, points, a) {
   let score = 0;
-  let reason = "レアリス：この問いは現実的に";
+  let reason = "レアリス：";
 
-  reason += `「${points.join("・")}」の観点で整理すべきだと考える。`;
+  reason += `この問いは現実的に「${points.join("・")}」で考えるべきだ。`;
 
-  if (text.match(/節約|安く|コスト/)) score += 1;
-  if (text.match(/疲|負担|リスク|不安/)) score -= 1;
+  if (a.includes("長時間移動になる")) score -= 2;
+  if (a.includes("睡眠の質が下がる可能性")) score -= 1;
+  if (a.includes("短時間で移動できる")) score += 2;
+  if (a.includes("コスト差を気にしている")) score += 1;
 
-  if (score > 0) {
-    reason += " 現実条件を踏まえても、前向きに検討できる余地はある。";
-  } else if (score < 0) {
-    reason += " 実行時の負担や不確実性が現実的な懸念となる。";
-  } else {
-    reason += " 利点と欠点が拮抗しており、決定打には欠ける。";
-  }
+  reason += ` 前提として、${a.join("、")}と仮定する。`;
+  reason += " これらを踏まえると、現実条件は決して楽観できない。";
 
-  return formatResult(score, reason);
+  return format(score, reason);
 }
 
-function thinkMeaning(text, points) {
+function thinkMeaning(text, points, a) {
   let score = 0;
-  let reason = "メイナ：この問いは";
+  let reason = "メイナ：";
 
-  reason += `「${points.join("・")}」という意味の軸で考えたい。`;
+  reason += `意味の軸は「${points.join("・")}」だと感じる。`;
 
-  if (text.match(/やりたい|意味|大事/)) score += 1;
-  if (text.match(/義務|仕方なく/)) score -= 1;
+  if (a.includes("コスト差を気にしている")) score += 2;
+  if (a.includes("体力消耗が少ない")) score += 1;
+  if (a.includes("翌日の体力に影響")) score -= 1;
 
-  if (score > 0) {
-    reason += " 自分の価値観に沿った選択だと感じられる。";
-  } else if (score < 0) {
-    reason += " 内面的な納得感が弱く、意味を見出しにくい。";
-  } else {
-    reason += " まだ自分の中で意味づけが定まりきっていない。";
-  }
+  reason += " 節約という選択には、自分で選んだという納得感がある。";
 
-  return formatResult(score, reason);
+  return format(score, reason);
 }
 
-function thinkRegret(text, points) {
+function thinkRegret(text, points, a) {
   let score = 0;
-  let reason = "レグレト：未来の視点では";
+  let reason = "レグレト：";
 
-  reason += `「${points.join("・")}」を比較する必要がある。`;
+  reason += `未来の視点では「${points.join("・")}」が重要になる。`;
 
-  if (text.match(/後悔|逃す|機会/)) score += 1;
-  if (text.match(/疲|失敗/)) score -= 1;
+  if (a.includes("コスト差を気にしている")) score += 1;
+  if (a.includes("翌日の体力に影響")) score -= 2;
 
-  if (score > 0) {
-    reason += " やらなかった場合の心残りが強く残りそうだ。";
-  } else if (score < 0) {
-    reason += " 実行した結果の後悔も無視できない。";
-  } else {
-    reason += " どちらの後悔も決定的とは言えない。";
-  }
+  reason += " 将来、どちらを選んだ自分を後悔しやすいかを考えたい。";
 
-  return formatResult(score, reason);
+  return format(score, reason);
 }
 
 /* ==============================
    共通処理
 ============================== */
-function formatResult(score, reason) {
+function format(score, reason) {
   let symbol = "△";
   if (score > 0) symbol = "○";
   if (score < 0) symbol = "✖️";
@@ -161,7 +155,7 @@ function formatResult(score, reason) {
 }
 
 /* ==============================
-   結論ロジック（レアリス優先）
+   結論（レアリス優先）
 ============================== */
 function decideFinal(r, m, g) {
   if (r < 0) return "結論：見送り";
