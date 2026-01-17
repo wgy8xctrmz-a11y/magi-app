@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("runButton").addEventListener("click", runMagi);
+  const btn = document.getElementById("runButton");
+  if (btn) btn.addEventListener("click", runMagi);
 });
 
 /* ==============================
@@ -29,20 +30,18 @@ const STRUCTURE_SIGNS = {
 };
 
 /* ==============================
-   人格定義（立場固定）
-============================== */
-const PERSONAS = {
-  reality: { name: "レアリス" },
-  meaning: { name: "メイナ" },
-  regret: { name: "レグレト" }
-};
-
-/* ==============================
    メイン処理
 ============================== */
 function runMagi() {
-  const input = document.getElementById("input").value.trim();
-  if (!input) return;
+  const inputEl = document.getElementById("input");
+  const outEl = document.getElementById("output");
+  if (!inputEl || !outEl) return;
+
+  const input = inputEl.value.trim();
+  if (!input) {
+    outEl.textContent = "※ 判断したい内容を入力してください。";
+    return;
+  }
 
   const scores = extractJudgmentStructures(input);
   const structures = pickMainStructures(scores);
@@ -77,7 +76,7 @@ ${regret}
 ━━━━━━━━━━━━━━
 `;
 
-  document.getElementById("output").textContent = result;
+  outEl.textContent = result;
 }
 
 /* ==============================
@@ -94,25 +93,34 @@ function extractJudgmentStructures(text) {
   return scores;
 }
 
+/* ==============================
+   主構造選択（必ず返す）
+============================== */
 function pickMainStructures(scores) {
-  return Object.entries(scores)
+  const picked = Object.entries(scores)
     .filter(([_, v]) => v > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([k]) => k);
+
+  // ★ フォールバック（超重要）
+  if (picked.length === 0) {
+    return ["efficiency_vs_acceptance", "short_vs_long"];
+  }
+  return picked;
 }
 
 /* ==============================
-   理由文生成（人格が言い切る）
+   理由文生成（人格は必ず立場を取る）
 ============================== */
 function generateReason(personaKey, structures) {
-  const main = structures[0];
+  const main = structures[0] || "efficiency_vs_acceptance";
   const label = JUDGMENT_STRUCTURES[main].label;
 
   if (personaKey === "reality") {
     return `私はこの悩みを「${label}」のトレードオフだと捉える。
 私は破綻しにくい側に立つ人格だ。
-この状況では、無理をする選択は現実的なリスクが残る。
+この状況では、無理をして進む選択は現実的なリスクが残る。
 だから私は、この判断にはブレーキをかける。`;
   }
 
@@ -129,4 +137,6 @@ function generateReason(personaKey, structures) {
 私は取り返しのつかない後悔を避ける側に立つ。
 この選択で失われる可能性のあるものは、後から戻せない。`;
   }
+
+  return "";
 }
