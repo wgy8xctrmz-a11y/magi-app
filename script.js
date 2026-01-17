@@ -7,12 +7,11 @@ function runMagi() {
   if (!input) return;
 
   const type = classifyQuestion(input);
-  const assumptions = buildAssumptions(input, type);
-  const views = viewpoints[type];
+  const core = extractCoreConflict(input, type);
 
-  const reality = thinkReality(input, views.reality, assumptions);
-  const meaning = thinkMeaning(input, views.meaning, assumptions);
-  const regret  = thinkRegret(input, views.regret, assumptions);
+  const reality = judgeWithStance("reality", core);
+  const meaning = judgeWithStance("meaning", core);
+  const regret  = judgeWithStance("regret", core);
 
   const finalDecision = decideFinal(reality.score, meaning.score, regret.score);
 
@@ -23,11 +22,8 @@ function runMagi() {
 📌 対象：
 ${input}
 
-🧠 問いの型：
-${type}
-
-🧠 暗黙の前提（MAGI仮定）：
-${assumptions.join(" / ")}
+🧠 問いの芯：
+${core.summary}
 
 🧭 判定：
 
@@ -52,100 +48,92 @@ ${finalDecision}
    問い分類
 ============================== */
 function classifyQuestion(text) {
-  if (text.match(/どちら|か|選ぶ|比較/)) return "選択・比較型";
-  if (text.match(/続ける|辞める|やめる|継続/)) return "継続・中断型";
-  if (text.match(/挑戦|踏み出す|リスク/)) return "挑戦・リスク型";
-  if (text.match(/伝える|距離|関係/)) return "人間関係型";
+  if (text.match(/どちら|ではなく/)) return "選択・比較型";
+  if (text.match(/続ける|辞める|やめる/)) return "継続・中断型";
+  if (text.match(/挑戦|踏み出す/)) return "挑戦・リスク型";
+  if (text.match(/伝える|関係/)) return "人間関係型";
   return "汎用判断型";
 }
 
 /* ==============================
-   前提補完レイヤー（核心）
+   問いの芯抽出（最重要）
 ============================== */
-function buildAssumptions(text, type) {
-  const a = [];
+function extractCoreConflict(text, type) {
 
-  // 共通の常識
-  if (text.match(/行く|移動|旅行/)) {
-    a.push("一定の移動距離がある");
-  }
-  if (text.match(/節約|安く|値段/)) {
-    a.push("コスト差を気にしている");
-  }
-
-  // 交通系の常識
-  if (text.match(/夜行/)) {
-    a.push("長時間移動になる");
-    a.push("睡眠の質が下がる可能性");
-    a.push("翌日の体力に影響");
-  }
-  if (text.match(/新幹線/)) {
-    a.push("短時間で移動できる");
-    a.push("体力消耗が少ない");
-    a.push("コストは高め");
+  // 選択・比較型の代表的トレードオフ
+  if (type === "選択・比較型") {
+    if (text.match(/夜行|バス/) && text.match(/新幹線/)) {
+      return {
+        summary:
+          "コストを抑える代わりに、移動の快適さや体調への負担を受け入れるべきか",
+        low: "コスト・節約",
+        high: "快適さ・体調・効率"
+      };
+    }
   }
 
-  // 人生判断系の常識
+  // 継続・中断型
   if (type === "継続・中断型") {
-    a.push("現状には一定の理由がある");
-    a.push("変化には不安が伴う");
+    return {
+      summary:
+        "今の安定や慣れを保つか、変化による不安を受け入れて前に進むべきか",
+      low: "安定",
+      high: "変化"
+    };
   }
 
-  return a;
+  // 汎用フォールバック
+  return {
+    summary:
+      "短期的な負担と、長期的な納得や影響のどちらを重視すべきか",
+    low: "短期の楽さ",
+    high: "長期の納得"
+  };
 }
 
 /* ==============================
-   人格別思考生成
+   人格の立場表明（核心）
 ============================== */
-
-function thinkReality(text, points, a) {
+function judgeWithStance(persona, core) {
   let score = 0;
-  let reason = "レアリス：";
+  let reason = "";
 
-  reason += `この問いは現実的に「${points.join("・")}」で考えるべきだ。`;
+  if (persona === "reality") {
+    reason += "レアリス：この問いの本質は、";
+    reason += `「${core.low}」と「${core.high}」のトレードオフだと見る。`;
 
-  if (a.includes("長時間移動になる")) score -= 2;
-  if (a.includes("睡眠の質が下がる可能性")) score -= 1;
-  if (a.includes("短時間で移動できる")) score += 2;
-  if (a.includes("コスト差を気にしている")) score += 1;
+    // レアリスは high（現実的安定・効率）を重視
+    score = core.high.includes("体調") || core.high.includes("効率") ? 0 : -1;
 
-  reason += ` 前提として、${a.join("、")}と仮定する。`;
-  reason += " これらを踏まえると、現実条件は決して楽観できない。";
+    reason +=
+      " 現実的には体調や効率を犠牲にする判断はリスクが高く、積極的に肯定はできない。";
+  }
 
-  return format(score, reason);
-}
+  if (persona === "meaning") {
+    reason += "メイナ：私はこの選択を、";
+    reason += `「${core.low}」を選ぶことの意味から考えたい。`;
 
-function thinkMeaning(text, points, a) {
-  let score = 0;
-  let reason = "メイナ：";
+    score = 1;
 
-  reason += `意味の軸は「${points.join("・")}」だと感じる。`;
+    reason +=
+      " 自分で工夫し、制約の中で選択すること自体に納得感や主体性を見出せる。";
+  }
 
-  if (a.includes("コスト差を気にしている")) score += 2;
-  if (a.includes("体力消耗が少ない")) score += 1;
-  if (a.includes("翌日の体力に影響")) score -= 1;
+  if (persona === "regret") {
+    reason += "レグレト：未来から振り返ると、";
+    reason += `「${core.high}」を軽視した場合の後悔が気になる。`;
 
-  reason += " 節約という選択には、自分で選んだという納得感がある。";
+    score = 0;
 
-  return format(score, reason);
-}
-
-function thinkRegret(text, points, a) {
-  let score = 0;
-  let reason = "レグレト：";
-
-  reason += `未来の視点では「${points.join("・")}」が重要になる。`;
-
-  if (a.includes("コスト差を気にしている")) score += 1;
-  if (a.includes("翌日の体力に影響")) score -= 2;
-
-  reason += " 将来、どちらを選んだ自分を後悔しやすいかを考えたい。";
+    reason +=
+      " 金銭は取り返せても、体調を崩した経験や楽しめなかった記憶は残りやすい。";
+  }
 
   return format(score, reason);
 }
 
 /* ==============================
-   共通処理
+   共通
 ============================== */
 function format(score, reason) {
   let symbol = "△";
