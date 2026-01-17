@@ -30,13 +30,20 @@ const STRUCTURE_SIGNS = {
 };
 
 /* ==============================
+   移動・体力系 経験則
+============================== */
+const FATIGUE_TRAVEL_SIGNS = [
+  "夜行", "バス", "移動", "長時間", "深夜",
+  "睡眠", "体力", "疲れ", "翌日", "早朝"
+];
+
+/* ==============================
    質問タイプ判定
 ============================== */
 const QUESTION_TYPE_SIGNS = {
   RELATION: ["相手", "人", "関係", "言うべき", "距離", "我慢"],
   CHALLENGE: ["安定", "挑戦", "踏み出", "変わ", "ずっと", "やりたかった"],
-  CONTINUE: ["続ける", "辞める", "このまま", "やめ時", "見切り"],
-  CHOICE: ["ではなく", "どちら", "か", "選ぶ", "比べ"]
+  CONTINUE: ["続ける", "辞める", "このまま", "やめ時", "見切り"]
 };
 
 function detectQuestionType(text) {
@@ -58,10 +65,17 @@ const QUESTION_TYPE_HYPOTHESES = {
 };
 
 function applyIntentHypotheses(scores, questionType) {
-  const hypotheses = QUESTION_TYPE_HYPOTHESES[questionType] || [];
-  hypotheses.forEach(key => {
+  (QUESTION_TYPE_HYPOTHESES[questionType] || []).forEach(key => {
     scores[key] = (scores[key] || 0) + 1;
   });
+  return scores;
+}
+
+function applyTravelFatigueBias(scores, questionType, text) {
+  if (questionType !== "選択・比較型") return scores;
+  if (FATIGUE_TRAVEL_SIGNS.some(w => text.includes(w))) {
+    scores["safety_vs_growth"] = (scores["safety_vs_growth"] || 0) + 1;
+  }
   return scores;
 }
 
@@ -86,10 +100,7 @@ function pickMainStructures(scores) {
     .slice(0, 3)
     .map(([k]) => k);
 
-  if (picked.length === 0) {
-    return ["efficiency_vs_acceptance", "short_vs_long"];
-  }
-  return picked;
+  return picked.length ? picked : ["efficiency_vs_acceptance"];
 }
 
 /* ==============================
@@ -97,12 +108,10 @@ function pickMainStructures(scores) {
 ============================== */
 const DECISION_RULES = {
   reality: {
-    blockIf: ["safety_vs_growth", "failure_vs_regret"],
-    allowIf: []
+    blockIf: ["safety_vs_growth", "failure_vs_regret"]
   },
   meaning: {
-    allowIf: ["present_vs_ideal", "safety_vs_growth", "failure_vs_regret"],
-    blockIf: []
+    allowIf: ["present_vs_ideal", "safety_vs_growth", "failure_vs_regret"]
   },
   regret: {
     blockIf: ["safety_vs_growth"],
@@ -126,22 +135,47 @@ function generateReason(personaKey, mainStructure) {
   const label = JUDGMENT_STRUCTURES[mainStructure].label;
 
   if (personaKey === "reality") {
-    return `私はこの悩みを「${label}」の観点から見る。
+    return `私はこの悩みを「${label}」の観点から捉える。
 破綻しにくさと安全性を最優先に考える人格として、
 無理を前提に進む判断にはブレーキをかけたい。`;
   }
 
   if (personaKey === "meaning") {
     return `この問いは「${label}」に関わるものだ。
-自分が何に納得して生きたいかという軸で見ると、
-意味や価値を感じられる選択かどうかが重要になる。`;
+自分が何に納得して選びたいかという軸で考えると、
+その選択が意味を持つかどうかが重要になる。`;
   }
 
-  if (personaKey === "regret") {
-    return `私はこの選択を将来から振り返る。
+  return `私はこの選択を将来から振り返る。
 「${label}」の結果として、
-後になって強い後悔が残らないかを重く見る。`;
+後になって取り返しのつかない後悔が残らないかを重く見る。`;
+}
+
+/* ==============================
+   三者協議 結論生成
+============================== */
+function generateFinalConclusion({ reality, meaning, regret }) {
+  if (regret === "✖️" && meaning !== "○") {
+    return `今回は後悔の不可逆性を最重視する。
+価格や効率よりも、体調や満足度を守る判断が妥当だ。
+結論：見送り。`;
   }
+
+  if (meaning === "○" && regret !== "✖️") {
+    return `この選択には価値や納得感が見出せる。
+致命的な後悔リスクも高くないため、前向きに進む意義がある。
+結論：やるべき。`;
+  }
+
+  if (reality === "✖️") {
+    return `現実的な成立条件に無視できない懸念がある。
+感情や意味以前に、今回は避ける判断が妥当だ。
+結論：見送り。`;
+  }
+
+  return `三者の意見はいずれも決定打に欠けている。
+追加条件を整理した上で再検討する余地がある。
+結論：保留・再検討。`;
 }
 
 /* ==============================
@@ -150,6 +184,7 @@ function generateReason(personaKey, mainStructure) {
 function runMagi() {
   const inputEl = document.getElementById("input");
   const outEl = document.getElementById("output");
+
   if (!inputEl || !outEl) return;
 
   const input = inputEl.value.trim();
@@ -158,12 +193,11 @@ function runMagi() {
     return;
   }
 
-  // 基本抽出
   let scores = extractJudgmentStructures(input);
 
-  // 質問タイプ → 意図仮説
   const questionType = detectQuestionType(input);
   scores = applyIntentHypotheses(scores, questionType);
+  scores = applyTravelFatigueBias(scores, questionType, input);
 
   const structures = pickMainStructures(scores);
   const main = structures[0];
@@ -171,6 +205,12 @@ function runMagi() {
   const realitySymbol = decideSymbol("reality", scores);
   const meaningSymbol = decideSymbol("meaning", scores);
   const regretSymbol  = decideSymbol("regret", scores);
+
+  const conclusion = generateFinalConclusion({
+    reality: realitySymbol,
+    meaning: meaningSymbol,
+    regret: regretSymbol
+  });
 
   outEl.textContent = `
 ━━━━━━━━━━━━━━
@@ -196,6 +236,8 @@ ${generateReason("meaning", main)}
 【レグレト｜REGRET】 ${regretSymbol}
 ${generateReason("regret", main)}
 
+🔍 結論：
+${conclusion}
 ━━━━━━━━━━━━━━
 `;
 }
