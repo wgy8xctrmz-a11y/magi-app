@@ -1,3 +1,13 @@
+document.addEventListener("DOMContentLoaded", () => {
+  const button = document.getElementById("runButton");
+  if (!button) {
+    console.error("ボタンが見つかりません");
+    return;
+  }
+
+  button.addEventListener("click", runMagi);
+});
+
 function runMagi() {
   const input = document.getElementById("input").value;
   const reality = Number(document.getElementById("reality").value);
@@ -30,5 +40,11 @@ ${decision}
 ━━━━━━━━━━━━━━
   `;
 
-  document.getElementById("output").textContent = result;
+  const output = document.getElementById("output");
+  if (!output) {
+    console.error("output要素が見つかりません");
+    return;
+  }
+
+  output.textContent = result;
 }
